@@ -15,4 +15,6 @@ A single-process Python Slack bot (Slack Bolt, **Socket Mode**) that proxies Cha
 - A real end-to-end run (bot replies in Slack) requires valid `SLACK_BOT_TOKEN` (xoxb-), `SLACK_APP_TOKEN` (xapp-, Socket Mode) and `OPENAI_API_KEY` in `.env`. Socket Mode means no public URL/port is needed — the process connects outbound to Slack.
 
 ### Testing
-- No test suite exists. Core pure logic can be exercised without credentials by importing `main` while mocking `slack_sdk.WebClient.auth_test`; useful targets: `convert_to_slack_markdown`, `extract_text_from_pdf`, `get_current_context_type`, and the full `handle_prompt` flow (mock `main.openai.chat.completions.create` and `main.client.chat_postMessage`).
+- Wiki search tests live in `test_wiki.py` and do not need credentials: `python -m unittest test_wiki.py`.
+- Core ChatGPT/PDF logic can be exercised without credentials by importing `main` while mocking `slack_sdk.WebClient.auth_test`; useful targets: `convert_to_slack_markdown`, `extract_text_from_pdf`, `get_current_context_type`, and the full `handle_prompt` flow (mock `main.openai.chat.completions.create` and `main.client.chat_postMessage`).
+- `/wiki` needs a real `NOTION_TOKEN` whose integration can read the Company Wiki. The bot indexes titles, tags, and public `wiki.intertrendhub.com` links on startup and refreshes them in the background.

@@ -14,7 +14,15 @@
         "bot_user": {
             "display_name": "ChatGPT",
             "always_online": true
-        }
+        },
+        "slash_commands": [
+            {
+                "command": "/wiki",
+                "description": "Search the Intertrend company wiki",
+                "usage_hint": "[keyword]",
+                "should_escape": false
+            }
+        ]
     },
     "oauth_config": {
         "redirect_urls": [
