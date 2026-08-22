@@ -3,7 +3,7 @@
         "name": "ChatGPT",
         "description": "'AI Slackbot!",
         "background_color": "#000000",
-        "long_description": "*Now updated to GPT-4o!* (5/15/24)\r\nGPT-4o (“o” for “omni”) is OpenAI's most advanced model. It has the same high intelligence as GPT-4 Turbo but it generates text 2x faster and is 50% cheaper. It's knowledge goes up to October 2023.\r\n\r\n*<https://renzei.slack.com/docs/T06NB5Y7J/F0738S7FBFZ|:noto-robot: Basics of Using ChatGPT and AI>*\r\n\r\n:slack_sparkle: *To use ChatGPT* directly message it from the App's Messages window.\r\nEx: ```write me an email newsletter about upcoming exciting company news. Mention: Long Beach Walls Event on June 15```\r\n\r\n:frame_with_picture: *DALL-E Integration* : Type \"image:\" then your prompt!\r\nEx: ```image: puppy at sunset```\r\n\r\n<https://docs.google.com/document/d/1ndIc9tArln2_EdgNs4mCbfGU73ha1I1yyLJpH6yJ3IY/edit?usp=sharing|Helpful Prompt Examples and Resources>"
+        "long_description": "Slack assistant with chat, image generation, PDF Q&A, and optional Notion wiki search via /wiki."image:\" then your prompt!\r\nEx: ```image: puppy at sunset```\r\n\r\n<https://docs.google.com/document/d/1ndIc9tArln2_EdgNs4mCbfGU73ha1I1yyLJpH6yJ3IY/edit?usp=sharing|Helpful Prompt Examples and Resources>"
     },
     "features": {
         "app_home": {
@@ -14,7 +14,15 @@
         "bot_user": {
             "display_name": "ChatGPT",
             "always_online": true
-        }
+        },
+        "slash_commands": [
+            {
+                "command": "/wiki",
+                "description": "Search the company wiki",
+                "usage_hint": "[keyword]",
+                "should_escape": false
+            }
+        ]
     },
     "oauth_config": {
         "redirect_urls": [

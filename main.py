@@ -24,9 +24,11 @@ import threading
 from functools import wraps
 from PyPDF2 import PdfReader
 import json
+import base64
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
+import wiki
 
 # Move helper functions to the top, right after imports
 def valid_input(value: Optional[str]) -> bool:
@@ -95,7 +97,7 @@ last_success_messages = {}  # Track last success message per channel
 last_request_datetime = {}  # Track the last request time for each channel
 history_expires_seconds = int(get_env('HISTORY_EXPIRES_IN', '900'))  # Use the existing environment variable
 
-CODE_VERSION = "1.0.1"  # Increment this when you make changes
+CODE_VERSION = "1.1.0"  # Increment this when you make changes
 
 # Global set to track processed file IDs
 processed_files = set()
@@ -112,6 +114,35 @@ HISTORY_SIZE = int(get_env('HISTORY_SIZE', '3'))
 SLACK_BOT_TOKEN = get_env('SLACK_BOT_TOKEN')
 SLACK_APP_TOKEN = get_env('SLACK_APP_TOKEN')
 OPENAI_API_KEY = get_env('OPENAI_API_KEY')
+NOTION_TOKEN = os.getenv('NOTION_TOKEN', '').strip()
+NOTION_WIKI_DATA_SOURCE_ID = os.getenv('NOTION_WIKI_DATA_SOURCE_ID', wiki.DEFAULT_DATA_SOURCE_ID).strip()
+NOTION_WIKI_TOOLKIT_DATA_SOURCE_ID = os.getenv('NOTION_WIKI_TOOLKIT_DATA_SOURCE_ID', '').strip()
+NOTION_WIKI_DATABASE_ID = os.getenv('NOTION_WIKI_DATABASE_ID', wiki.DEFAULT_DATABASE_ID).strip()
+WIKI_PUBLIC_BASE_URL = os.getenv('WIKI_PUBLIC_BASE_URL', wiki.DEFAULT_WIKI_BASE_URL).strip()
+WIKI_INDEX_REFRESH_SECONDS = int(os.getenv('WIKI_INDEX_REFRESH_SECONDS', '900'))
+
+
+def generate_image_file(prompt: str) -> str:
+	"""Generate an image with gpt-image-2 and write it to a temp PNG."""
+	response = openai.images.generate(
+		model="gpt-image-2",
+		prompt=prompt,
+		n=1,
+		size="1024x1024",
+	)
+	item = response.data[0]
+	tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+	try:
+		if getattr(item, "url", None):
+			tmp.write(requests.get(item.url, timeout=60).content)
+		elif getattr(item, "b64_json", None):
+			tmp.write(base64.b64decode(item.b64_json))
+		else:
+			raise ValueError("Image API returned no image data")
+	finally:
+		tmp.close()
+	return tmp.name
+
 
 # Initialize OpenAI configuration
 openai.api_key = OPENAI_API_KEY
@@ -129,6 +160,24 @@ try:
 except SlackApiError as e:
 	logger.error(f"Error authenticating with Slack: {e}")
 	raise
+
+wiki_index = wiki.WikiIndex(
+	token=NOTION_TOKEN,
+	data_source_id=NOTION_WIKI_DATA_SOURCE_ID,
+	data_source_ids=[NOTION_WIKI_TOOLKIT_DATA_SOURCE_ID] if NOTION_WIKI_TOOLKIT_DATA_SOURCE_ID else None,
+	database_id=NOTION_WIKI_DATABASE_ID,
+	base_url=WIKI_PUBLIC_BASE_URL,
+)
+
+if wiki_index.configured:
+	try:
+		indexed_pages = wiki_index.refresh()
+		logger.info(f"Indexed {len(indexed_pages)} Notion wiki pages")
+	except Exception as e:
+		logger.error(f"Initial Notion wiki index failed: {e}")
+	wiki.start_background_refresh(wiki_index, WIKI_INDEX_REFRESH_SECONDS, logger)
+else:
+	logger.warning("NOTION_TOKEN is not set; /wiki search is disabled")
 
 # ChatGPT configuration
 model = get_env('GPT_MODEL', 'gpt-4')
@@ -350,7 +399,9 @@ def handle_app_mention(body, say):
 		# Remove bot mention from text
 		text = text.replace(f'<@{bot_user_id}>', '').strip()
 
-		if text.lower().startswith('image:'):
+		if text.lower().startswith('wiki:'):
+			handle_wiki_request(text[5:].strip(), channel, thread_ts, user, say)
+		elif text.lower().startswith('image:'):
 			prompt = text[6:].strip()
 			handle_image_request(prompt, channel, thread_ts)
 		else:
@@ -382,6 +433,10 @@ def handle_message(body, say):
 		user = event.get('user')
 
 		if not text:
+			return
+
+		if text.lower().startswith('wiki:'):
+			handle_wiki_request(text[5:].strip(), channel, thread_ts, user, say)
 			return
 
 		# Handle image requests
@@ -513,34 +568,22 @@ def handle_image_request(prompt, channel, thread_ts=None):
 	client.chat_postMessage(
 		channel=channel,
 		thread_ts=thread_ts,
-		text=":art: Creating your image with DALL-E 3... (this may take up to 15 seconds)"
+		text=":art: Creating your image... (this may take up to 30 seconds)"
 	)
 
 	try:
-		response = openai.images.generate(
-			model="dall-e-3",
-			prompt=prompt,
-			n=1,
-			size="1024x1024",
-			quality="hd"
-		)
-
-		image_url = response.data[0].url
-		image_response = requests.get(image_url)
-
-		with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-			tmp_file.write(image_response.content)
-			tmp_file.flush()
-
+		image_path = generate_image_file(prompt)
+		try:
 			client.files_upload_v2(
 				channel=channel,
 				thread_ts=thread_ts,
-				file=tmp_file.name,
+				file=image_path,
 				filename=filename,
-				initial_comment=f"Here's your DALL-E 3 image of: {prompt}"
+				initial_comment=f"Here's your generated image of: {prompt}"
 			)
-
-		os.unlink(tmp_file.name)
+		finally:
+			if os.path.exists(image_path):
+				os.unlink(image_path)
 
 	except Exception as e:
 		client.chat_postMessage(
@@ -555,32 +598,20 @@ def handle_image_generation(prompt, channel, thread_ts, say, user):
 		start_time = time.time()
 		
 		filename = f"{prompt[:30].strip().replace(' ', ' ').lower()}.png"
-		say(":noto_paint: Creating your image with DALL-E 3... (this may take up to 15 seconds)")
+		say(":noto_paint: Creating your image... (this may take up to 30 seconds)")
 
-		response = openai.images.generate(
-			model="dall-e-3",
-			prompt=prompt,
-			n=1,
-			size="1024x1024",
-			quality="hd"
-		)
-
-		image_url = response.data[0].url
-		image_response = requests.get(image_url)
-
-		with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp_file:
-			tmp_file.write(image_response.content)
-			tmp_file.flush()
-
+		image_path = generate_image_file(prompt)
+		try:
 			client.files_upload_v2(
 				channel=channel,
 				thread_ts=thread_ts,
-				file=tmp_file.name,
+				file=image_path,
 				filename=filename,
-				initial_comment=f"Here's your DALL-E 3 image of: {prompt}"
+				initial_comment=f"Here's your generated image of: {prompt}"
 			)
-
-		os.unlink(tmp_file.name)
+		finally:
+			if os.path.exists(image_path):
+				os.unlink(image_path)
 
 		# Log successful image generation
 		response_time = f"{(time.time() - start_time):.2f}s"
@@ -618,26 +649,14 @@ def handle_image(image_prompt, channel, thread_ts, say):
 	image_path = None
 	try:
 		# DALL-E call
-		response = openai.images.generate(
-			model="dall-e-3",
-			prompt=image_prompt,
-			n=1,
-			size="1024x1024"
-		)
-		image_url = shorten_url(response.data[0].url)
-
-		# Use context manager for file operations
 		image_name = f"{image_prompt[:30].replace(' ', '_')}.png"
-		image_path = os.path.join('./tmp', image_name)
-
-		with urlopen(image_url) as response, open(image_path, 'wb') as image_file:
-			image_file.write(response.read())
-
-		upload_response = client.files_upload_v2(
+		image_path = generate_image_file(image_prompt)
+		client.files_upload_v2(
 			channel=channel,
 			thread_ts=thread_ts,
 			initial_comment="Here is your image:",
-			file=image_path
+			file=image_path,
+			filename=image_name,
 		)
 	except Exception as e:
 		logger.error(f'ChatGPT image error: {e}')
@@ -645,6 +664,41 @@ def handle_image(image_prompt, channel, thread_ts, say):
 	finally:
 		if image_path and os.path.exists(image_path):
 			os.remove(image_path)
+
+@app.command("/wiki")
+def handle_wiki_command(ack, command, respond):
+	"""Slash command: /wiki <keyword> searches the indexed Company Wiki."""
+	ack()
+	query = (command.get("text") or "").strip()
+	user = command.get("user_id")
+	channel = command.get("channel_id")
+	payload = wiki.build_command_response(wiki_index, query)
+	respond(**payload)
+	log_interaction_to_sheet(
+		user_id=user,
+		interaction=f"/wiki {query}".strip(),
+		gpt_reply=payload.get("text"),
+		channel_id=channel,
+		event_type="wiki_search",
+	)
+
+
+def handle_wiki_request(query, channel, thread_ts, user, say):
+	"""Handle wiki: keyword lookups from messages and mentions."""
+	payload = wiki.build_command_response(wiki_index, query)
+	say(
+		text=payload.get("text"),
+		blocks=payload.get("blocks"),
+		thread_ts=thread_ts,
+	)
+	log_interaction_to_sheet(
+		user_id=user,
+		interaction=f"wiki: {query}".strip(),
+		gpt_reply=payload.get("text"),
+		channel_id=channel,
+		event_type="wiki_search",
+	)
+
 
 @app.event("file_shared")
 def handle_file_shared(body, say):
