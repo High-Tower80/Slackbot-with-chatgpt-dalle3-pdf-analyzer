@@ -105,8 +105,8 @@ pip install -r requirements.txt
    - PDF_CONTEXT_EXPIRES_IN=3600
    - THREAD_HISTORY_EXPIRES_IN=1800
    - NOTION_TOKEN=your-notion-integration-token
-   - NOTION_WIKI_DATA_SOURCE_ID=30840c6a-9bad-4534-9b41-3f216c7062da
-   - WIKI_PUBLIC_BASE_URL=https://wiki.intertrendhub.com
+   - NOTION_WIKI_DATA_SOURCE_ID=your-notion-data-source-id
+   - WIKI_PUBLIC_BASE_URL=https://wiki.example.com
    - WIKI_INDEX_REFRESH_SECONDS=900
 
 ### Running the Slackbot
@@ -128,7 +128,7 @@ The bot keeps an in-memory index of the Notion **Company Wiki** (titles, tags, a
 /wiki wifi
 ```
 
-or type `wiki: pto` in a DM or channel. Results use formatted `wiki.intertrendhub.com` links, not raw Notion URLs.
+or type `wiki: pto` in a DM or channel. Results use formatted public wiki links, not raw Notion URLs.
 
 To enable wiki search:
 1. Create a Notion internal integration and share the **Company Wiki** database with it.

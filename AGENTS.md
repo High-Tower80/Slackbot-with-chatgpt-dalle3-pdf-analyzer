@@ -3,7 +3,7 @@
 ## Cursor Cloud specific instructions
 
 ### What this is
-A single-process Python Slack bot (Slack Bolt, **Socket Mode**) that proxies ChatGPT + DALL-E 3 into Slack and does PDF Q&A. Entry point is `main.py` (run `python main.py`). Optional Google Sheets interaction logging activates only if a `google_sheets_creds.json` service-account file is present. `app.py`/`home.py`/`Procfile` are leftover Railway/gunicorn deploy scaffolding and are not the dev entry point (the `Procfile` references a non-existent `main:flask_app`).
+A single-process Python Slack bot (Slack Bolt, **Socket Mode**) that proxies ChatGPT + image generation into Slack and does PDF Q&A. Entry point is `main.py` (run `python main.py`). Optional Google Sheets interaction logging activates only if a `google_sheets_creds.json` service-account file is present. `app.py`/`home.py`/`Procfile` are leftover Railway/gunicorn deploy scaffolding and are not the dev entry point (the `Procfile` references a non-existent `main:flask_app`).
 
 ### Environment
 - The update script creates a venv at `.venv` and installs `requirements.txt`. Use the venv interpreter: `.venv/bin/python main.py`. `.venv` is gitignored.
@@ -17,4 +17,4 @@ A single-process Python Slack bot (Slack Bolt, **Socket Mode**) that proxies Cha
 ### Testing
 - Wiki search tests live in `test_wiki.py` and do not need credentials: `python -m unittest test_wiki.py`.
 - Core ChatGPT/PDF logic can be exercised without credentials by importing `main` while mocking `slack_sdk.WebClient.auth_test`; useful targets: `convert_to_slack_markdown`, `extract_text_from_pdf`, `get_current_context_type`, and the full `handle_prompt` flow (mock `main.openai.chat.completions.create` and `main.client.chat_postMessage`).
-- `/wiki` needs a real `NOTION_TOKEN` whose integration can read the Company Wiki. The bot indexes titles, tags, and public `wiki.intertrendhub.com` links on startup and refreshes them in the background.
+- `/wiki` needs a real `NOTION_TOKEN` whose integration can read the Company Wiki. The bot indexes titles, tags, and public wiki links on startup and refreshes them in the background.
