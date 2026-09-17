@@ -1,0 +1,4 @@
+{
+  "name": "slackbot-with-chatgpt-dalle3-pdf-analyzer",
+  "install": "./scripts/cloud-agent-install.sh"
+}

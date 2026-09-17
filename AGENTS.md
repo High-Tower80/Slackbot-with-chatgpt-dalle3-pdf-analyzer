@@ -6,6 +6,7 @@
 A single-process Python Slack bot (Slack Bolt, **Socket Mode**) that proxies ChatGPT + image generation into Slack and does PDF Q&A. Entry point is `main.py` (run `python main.py`). Optional Google Sheets interaction logging activates only if a `google_sheets_creds.json` service-account file is present. `app.py`/`home.py`/`Procfile` are leftover Railway/gunicorn deploy scaffolding and are not the dev entry point (the `Procfile` references a non-existent `main:flask_app`).
 
 ### Environment
+- Cloud Agent install lives in `.cursor/environment.json` and `scripts/cloud-agent-install.sh`. Both install `python3.12-venv` first — Ubuntu's `python3` package does not include `ensurepip`, so a bare `python3 -m venv .venv` exits with a broken venv (no `.venv/bin/pip`) and the rest of install fails with exit 127.
 - The update script creates a venv at `.venv` and installs `requirements.txt`. Use the venv interpreter: `.venv/bin/python main.py`. `.venv` is gitignored.
 - `requirements.txt` was corrected during setup: `main.py` imports `flask` and `googleapiclient` (added), and `openai==1.3.5` needs `httpx==0.27.2` pinned — newer httpx (>=0.28) drops the `proxies` kwarg and makes every OpenAI ChatGPT/DALL-E call fail at runtime with `Client.__init__() got an unexpected keyword argument 'proxies'`.
 
